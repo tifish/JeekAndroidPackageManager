@@ -1,0 +1,80 @@
+﻿<Window x:Class="JeekAndroidPackageManager.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        mc:Ignorable="d"
+        Title="Jeek Android Package Manager" Height="500" Width="800">
+    <Grid Margin="10">
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="Auto" />
+            <ColumnDefinition Width="*" />
+            <ColumnDefinition Width="Auto" />
+        </Grid.ColumnDefinitions>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+        <DockPanel Grid.Row="0" Grid.Column="0">
+            <Label DockPanel.Dock="Left" Content="Devices:" VerticalAlignment="Center" />
+            <Button DockPanel.Dock="Right"
+                    VerticalAlignment="Center"
+                    Width="24"
+                    Height="24"
+                    Click="RefreshButton_Click">
+                <Image Source="/Icons/Refresh.png" />
+            </Button>
+        </DockPanel>
+        <ListBox Grid.Row="1" Grid.Column="0" x:Name="DeviceListBox" ItemsSource="{Binding Devices}"
+                 Width="150"
+                 VerticalAlignment="Stretch"
+                 SelectionChanged="DeviceListBox_SelectionChanged" IsTabStop="True" />
+        <Label Grid.Row="0" Grid.Column="1" Content="Packages:" VerticalAlignment="Center" />
+        <ListBox x:Name="PackageListBox" Grid.Row="1" Grid.Column="1" ItemsSource="{Binding DisplayPackages}"
+                 IsTabStop="True"
+                 Width="500"
+                 VerticalAlignment="Stretch" />
+        <StackPanel Grid.Row="1" Grid.Column="2" Orientation="Vertical">
+            <GroupBox Header="Category" HorizontalAlignment="Left" VerticalAlignment="Top">
+                <StackPanel Orientation="Vertical">
+                    <RadioButton Content="All" HorizontalAlignment="Left"
+                                 VerticalAlignment="Top" GroupName="AppCategory" IsChecked="True"
+                                 Click="AppCategoryRadioButton_Click" />
+                    <RadioButton Content="System" HorizontalAlignment="Left"
+                                 VerticalAlignment="Top" GroupName="AppCategory" IsChecked="False"
+                                 Click="AppCategoryRadioButton_Click" />
+                    <RadioButton Content="User" HorizontalAlignment="Left"
+                                 VerticalAlignment="Top" GroupName="AppCategory" IsChecked="False"
+                                 Click="AppCategoryRadioButton_Click" />
+                </StackPanel>
+            </GroupBox>
+            <GroupBox Header="Status" HorizontalAlignment="Left" VerticalAlignment="Top">
+                <StackPanel Orientation="Vertical">
+                    <RadioButton Content="All" HorizontalAlignment="Left"
+                                 VerticalAlignment="Top" GroupName="AppStatus" IsChecked="True"
+                                 Click="AppStatusRadioButton_Click" />
+                    <RadioButton Content="Enabled" HorizontalAlignment="Left"
+                                 VerticalAlignment="Top" GroupName="AppStatus" IsChecked="False"
+                                 Click="AppStatusRadioButton_Click" />
+                    <RadioButton Content="Disabled" HorizontalAlignment="Left"
+                                 VerticalAlignment="Top" GroupName="AppStatus" IsChecked="False"
+                                 Click="AppStatusRadioButton_Click" />
+                </StackPanel>
+            </GroupBox>
+            <StackPanel Orientation="Vertical">
+                <Label Content="Filter:" HorizontalAlignment="Left" VerticalAlignment="Top"
+                       AutomationProperties.AcceleratorKey="F" />
+                <TextBox x:Name="FilterTextBox" HorizontalAlignment="Left" Text="" TextWrapping="Wrap"
+                         VerticalAlignment="Top" Width="120" TextChanged="FilterTextBox_TextChanged" />
+                <StackPanel Orientation="Vertical" HorizontalAlignment="Left" Width="80">
+                    <Button Content="Disable"
+                            Click="DisablePackageButton_Click" />
+                    <Button Content="Enable"
+                            Click="EnablePackageButton_Click" />
+                    <Button x:Name="GetNamesButton" Content="Get Names"
+                            Click="GetNamesButton_Click" />
+                </StackPanel>
+            </StackPanel>
+        </StackPanel>
+    </Grid>
+</Window>
