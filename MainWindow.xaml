@@ -14,6 +14,7 @@
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
         <DockPanel Grid.Row="0" Grid.Column="0">
             <Label DockPanel.Dock="Left" Content="Devices:" VerticalAlignment="Center" />
@@ -76,5 +77,8 @@
                 </StackPanel>
             </StackPanel>
         </StackPanel>
+        <StatusBar Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="3">
+            <TextBlock x:Name="StatusTextBlock"></TextBlock>
+        </StatusBar>
     </Grid>
 </Window>

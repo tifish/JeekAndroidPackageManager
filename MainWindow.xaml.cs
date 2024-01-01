@@ -21,17 +21,18 @@ public partial class MainWindow : Window
 
         Devices = new ObservableCollection<string>();
         DisplayPackages = new ObservableCollection<string>();
-        RefreshDevices();
+
+        RefreshDevices().ConfigureAwait(false);
     }
 
     public ObservableCollection<string> Devices { get; set; }
     public List<string> Packages { get; set; }
     public ObservableCollection<string> DisplayPackages { get; set; }
 
-    private void RefreshDevices()
+    private async Task RefreshDevices()
     {
         Devices.Clear();
-        foreach (var device in Adb.GetDevices())
+        foreach (var device in await Adb.GetDevices())
             Devices.Add(device);
     }
 
@@ -48,13 +49,13 @@ public partial class MainWindow : Window
         }
     }
 
-    private void RefreshPackages()
+    private async Task RefreshPackages()
     {
         var device = CurrentDevice;
         if (string.IsNullOrEmpty(device))
             return;
 
-        Packages = Adb.GetPackages(device, _appCategory, _appStatus);
+        Packages = await Adb.GetPackages(device, _appCategory, _appStatus);
         FilterPackages();
     }
 
@@ -72,17 +73,17 @@ public partial class MainWindow : Window
         }
     }
 
-    private void DeviceListBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    private async void DeviceListBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
-        RefreshPackages();
+        await RefreshPackages();
     }
 
-    private void RefreshButton_Click(object sender, RoutedEventArgs e)
+    private async void RefreshButton_Click(object sender, RoutedEventArgs e)
     {
-        RefreshDevices();
+        await RefreshDevices();
     }
 
-    private void DisablePackageButton_Click(object sender, RoutedEventArgs e)
+    private async void DisablePackageButton_Click(object sender, RoutedEventArgs e)
     {
         var device = CurrentDevice;
         if (string.IsNullOrEmpty(device))
@@ -92,10 +93,10 @@ public partial class MainWindow : Window
         if (string.IsNullOrEmpty(package))
             return;
 
-        Adb.DisablePackage(device, package);
+        await Adb.DisablePackage(device, package);
     }
 
-    private void EnablePackageButton_Click(object sender, RoutedEventArgs e)
+    private async void EnablePackageButton_Click(object sender, RoutedEventArgs e)
     {
         var device = CurrentDevice;
         if (string.IsNullOrEmpty(device))
@@ -105,12 +106,12 @@ public partial class MainWindow : Window
         if (string.IsNullOrEmpty(package))
             return;
 
-        Adb.EnablePackage(device, package);
+        await Adb.EnablePackage(device, package);
     }
 
-    private void GetNamesButton_Click(object sender, RoutedEventArgs e)
+    private async void GetNamesButton_Click(object sender, RoutedEventArgs e)
     {
-        CacheAppNames();
+        await CacheAppNames();
     }
 
     private void FilterTextBox_TextChanged(object sender, TextChangedEventArgs e)
@@ -121,21 +122,21 @@ public partial class MainWindow : Window
     private Adb.AppCategory _appCategory = Adb.AppCategory.All;
     private Adb.AppStatus _appStatus = Adb.AppStatus.All;
 
-    private void AppCategoryRadioButton_Click(object sender, RoutedEventArgs e)
+    private async void AppCategoryRadioButton_Click(object sender, RoutedEventArgs e)
     {
         var btn = (RadioButton)sender;
         Enum.TryParse(btn.Content.ToString(), out _appCategory);
-        RefreshPackages();
+        await RefreshPackages();
     }
 
-    private void AppStatusRadioButton_Click(object sender, RoutedEventArgs e)
+    private async void AppStatusRadioButton_Click(object sender, RoutedEventArgs e)
     {
         var btn = (RadioButton)sender;
         Enum.TryParse(btn.Content.ToString(), out _appStatus);
-        RefreshPackages();
+        await RefreshPackages();
     }
 
-    private async void CacheAppNames()
+    private async Task CacheAppNames()
     {
         GetNamesButton.IsEnabled = false;
 
@@ -143,29 +144,32 @@ public partial class MainWindow : Window
         if (string.IsNullOrEmpty(device))
             return;
 
-        await Task.Run(() =>
+        Environment.CurrentDirectory = AppDomain.CurrentDomain.SetupInformation.ApplicationBase ?? string.Empty;
+        await Adb.PushAapt(device);
+
+        var appPackagePathsDict = await Adb.GetPackagesWithApkPaths(device);
+        var total = appPackagePathsDict.Count;
+        var count = 0;
+        foreach (var (package, path) in appPackagePathsDict)
         {
-            Environment.CurrentDirectory = AppDomain.CurrentDomain.SetupInformation.ApplicationBase ?? string.Empty;
-            Adb.PushAapt(device);
+            count++;
+            StatusTextBlock.Text = $"Getting app names: {count} / {total} {package}";
 
-            var appPackagePathsDict = Adb.GetPackagesWithApkPaths(device);
-            foreach (var (package, path) in appPackagePathsDict)
-            {
-                if (AppNames.GetAppName(package) != null)
-                    continue;
+            if (!string.IsNullOrEmpty(AppNames.GetAppName(package)))
+                continue;
 
-                var appName = Adb.GetAppName(device, path);
-                if (appName == null)
-                    continue;
+            var appName = await Adb.GetAppName(device, path);
+            if (string.IsNullOrEmpty(appName))
+                continue;
 
-                AppNames.SetAppName(package, appName);
-            }
+            AppNames.SetAppName(package, appName);
+        }
 
-            AppNames.Save();
-        });
+        AppNames.Save();
 
-        // await new UIThreadAwaiter();
-        RefreshPackages();
+        StatusTextBlock.Text = "Got app names.";
+
+        await RefreshPackages();
         GetNamesButton.IsEnabled = true;
     }
 }

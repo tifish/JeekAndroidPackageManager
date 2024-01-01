@@ -10,7 +10,7 @@ static class AppNames
 
     public static string GetAppName(string package)
     {
-        return _appPackageNameDict.TryGetValue(package, out var appName) ? appName : null;
+        return _appPackageNameDict.GetValueOrDefault(package);
     }
 
     public static void SetAppName(string package, string name)
