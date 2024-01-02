@@ -145,16 +145,26 @@ public class Adb
         await RunWithDevice(device, "shell chmod 0755 /data/local/tmp/aapt-arm-pie");
     }
 
-    private static readonly Regex AttrRegex = new Regex(@"(\w+)='([^']*)'");
+    public class AppName
+    {
+        public AppName(string defaultName = "", string localName = "")
+        {
+            DefaultName = defaultName;
+            LocalName = localName;
+        }
 
-    public static async Task<string> GetAppName(string device, string apkPath)
+        public string DefaultName;
+        public string LocalName;
+    }
+
+    public static async Task<AppName?> GetAppName(string device, string apkPath, string locale = "zh-CN")
     {
         var cmdLines = await RunWithDevice(device, $"shell /data/local/tmp/aapt-arm-pie d badging {apkPath}");
         if (cmdLines.Count == 0)
             return null;
 
-        var cnName = string.Empty;
-        var name = string.Empty;
+        var localKey = $"application-label-{locale}";
+        var appName = new AppName();
         for (var i = 1; i < cmdLines.Count; i++)
         {
             var line = cmdLines[i];
@@ -165,36 +175,12 @@ public class Adb
                 continue;
 
             var key = line[..sepIndex];
-            switch (key)
-            {
-                case "application-label-zh-CN":
-                    cnName = line[(sepIndex + 1)..].Trim('\'');
-                    break;
-                case "application-label":
-                    name = line[(sepIndex + 1)..].Trim('\'');
-                    break;
-                case "application":
-                    {
-                        var content = line[(sepIndex + 1)..].Trim();
-                        foreach (Match match in AttrRegex.Matches(content))
-                        {
-                            var attrName = match.Groups[1].Value;
-                            var attrValue = match.Groups[2].Value;
-
-                            if (attrName != "label")
-                                continue;
-
-                            name = attrValue;
-
-                            if (cnName == string.Empty && name.Any(c => c >= 128))
-                                cnName = name;
-                        }
-
-                        break;
-                    }
-            }
+            if (key == "application-label")
+                appName.DefaultName = line[(sepIndex + 1)..].Trim('\'');
+            else if (key == localKey)
+                appName.LocalName = line[(sepIndex + 1)..].Trim('\'');
         }
 
-        return cnName != string.Empty ? cnName : name;
+        return appName;
     }
 }

@@ -65,11 +65,21 @@ public partial class MainWindow : Window
         var filter = FilterTextBox.Text;
         foreach (var package in Packages)
         {
-            var appName = AppNames.GetAppName(package) ?? "";
-            if (package.Contains(filter) || appName.Contains(filter))
-                DisplayPackages.Add(string.IsNullOrEmpty(appName)
-                    ? package
-                    : $"{package}{PackageNameSep}{appName}");
+            var appName = AppNames.GetAppName(package);
+            if (package.Contains(filter)
+                || appName != null && (appName.DefaultName.Contains(filter) || appName.LocalName.Contains(filter)))
+            {
+                var displayName = package;
+                if (appName != null)
+                {
+                    if (appName.LocalName != "")
+                        displayName += $"{PackageNameSep}{appName.LocalName}";
+                    if (appName.DefaultName != "" && appName.DefaultName != appName.LocalName)
+                        displayName += $"{PackageNameSep}{appName.DefaultName}";
+                }
+
+                DisplayPackages.Add(displayName);
+            }
         }
     }
 
@@ -155,11 +165,12 @@ public partial class MainWindow : Window
             count++;
             StatusTextBlock.Text = $"Getting app names: {count} / {total} {package}";
 
-            if (!string.IsNullOrEmpty(AppNames.GetAppName(package)))
+            var appName = AppNames.GetAppName(package);
+            if (appName != null)
                 continue;
 
-            var appName = await Adb.GetAppName(device, path);
-            if (string.IsNullOrEmpty(appName))
+            appName = await Adb.GetAppName(device, path);
+            if (appName == null)
                 continue;
 
             AppNames.SetAppName(package, appName);

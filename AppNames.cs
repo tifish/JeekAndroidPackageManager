@@ -6,14 +6,14 @@ namespace JeekAndroidPackageManager;
 
 static class AppNames
 {
-    private static readonly Dictionary<string, string> _appPackageNameDict = new();
+    private static readonly Dictionary<string, Adb.AppName> _appPackageNameDict = new();
 
-    public static string GetAppName(string package)
+    public static Adb.AppName? GetAppName(string package)
     {
         return _appPackageNameDict.GetValueOrDefault(package);
     }
 
-    public static void SetAppName(string package, string name)
+    public static void SetAppName(string package, Adb.AppName name)
     {
         _appPackageNameDict[package] = name;
     }
@@ -34,10 +34,10 @@ static class AppNames
                 continue;
 
             var items = line.Split('\t');
-            if (items.Length != 2)
+            if (items.Length != 3)
                 continue;
 
-            _appPackageNameDict.Add(items[0], items[1]);
+            _appPackageNameDict.Add(items[0], new Adb.AppName(items[1], items[2]));
         }
     }
 
@@ -45,6 +45,6 @@ static class AppNames
     {
         using var fs = new StreamWriter(ConfigFile);
         foreach (var (package, appName) in _appPackageNameDict)
-            fs.WriteLine($"{package}\t{appName}");
+            fs.WriteLine($"{package}\t{appName.DefaultName}\t{appName.LocalName}");
     }
 }

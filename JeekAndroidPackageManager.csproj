@@ -12,6 +12,7 @@
         <AppendRuntimeIdentifierToOutputPath>false</AppendRuntimeIdentifierToOutputPath>
         <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
         <SelfContained>false</SelfContained>
+        <Nullable>enable</Nullable>
     </PropertyGroup>
 
     <ItemGroup>
