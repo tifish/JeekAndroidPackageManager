@@ -1,6 +1,9 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.ComponentModel;
+using System.Diagnostics;
+using System.Linq;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
@@ -12,6 +15,11 @@ namespace JeekAndroidPackageManager;
 /// </summary>
 public partial class MainWindow : Window
 {
+    private const char PackageNameSep = '=';
+
+    private Adb.AppCategory _appCategory = Adb.AppCategory.All;
+    private Adb.AppStatus _appStatus = Adb.AppStatus.All;
+
     public MainWindow()
     {
         AppNames.Load();
@@ -26,18 +34,10 @@ public partial class MainWindow : Window
     }
 
     public ObservableCollection<string> Devices { get; set; }
-    public List<string> Packages { get; set; }
+    public List<string> Packages { get; set; } = new();
     public ObservableCollection<string> DisplayPackages { get; set; }
 
-    private async Task RefreshDevices()
-    {
-        Devices.Clear();
-        foreach (var device in await Adb.GetDevices())
-            Devices.Add(device);
-    }
-
-    public string CurrentDevice => DeviceListBox.SelectedItem as string;
-    private const char PackageNameSep = '=';
+    public string CurrentDevice => DeviceListBox.SelectedItem as string ?? "";
 
     public string CurrentPackage
     {
@@ -47,6 +47,13 @@ public partial class MainWindow : Window
             var sepIndex = text.IndexOf(PackageNameSep);
             return sepIndex == -1 ? text : text.Substring(0, sepIndex);
         }
+    }
+
+    private async Task RefreshDevices()
+    {
+        Devices.Clear();
+        foreach (var device in await Adb.GetDevices())
+            Devices.Add(device);
     }
 
     private async Task RefreshPackages()
@@ -67,7 +74,7 @@ public partial class MainWindow : Window
         {
             var appName = AppNames.GetAppName(package);
             if (package.Contains(filter)
-                || appName != null && (appName.DefaultName.Contains(filter) || appName.LocalName.Contains(filter)))
+                || (appName != null && (appName.DefaultName.Contains(filter) || appName.LocalName.Contains(filter))))
             {
                 var displayName = package;
                 if (appName != null)
@@ -129,9 +136,6 @@ public partial class MainWindow : Window
         FilterPackages();
     }
 
-    private Adb.AppCategory _appCategory = Adb.AppCategory.All;
-    private Adb.AppStatus _appStatus = Adb.AppStatus.All;
-
     private async void AppCategoryRadioButton_Click(object sender, RoutedEventArgs e)
     {
         var btn = (RadioButton)sender;
@@ -149,38 +153,107 @@ public partial class MainWindow : Window
     private async Task CacheAppNames()
     {
         GetNamesButton.IsEnabled = false;
-
-        var device = CurrentDevice;
-        if (string.IsNullOrEmpty(device))
-            return;
-
-        Environment.CurrentDirectory = AppDomain.CurrentDomain.SetupInformation.ApplicationBase ?? string.Empty;
-        await Adb.PushAapt(device);
-
-        var appPackagePathsDict = await Adb.GetPackagesWithApkPaths(device);
-        var total = appPackagePathsDict.Count;
-        var count = 0;
-        foreach (var (package, path) in appPackagePathsDict)
+        var stopwatch = Stopwatch.StartNew();
+        try
         {
-            count++;
-            StatusTextBlock.Text = $"Getting app names: {count} / {total} {package}";
+            var device = CurrentDevice;
+            if (string.IsNullOrEmpty(device))
+                return;
 
-            var appName = AppNames.GetAppName(package);
-            if (appName != null)
-                continue;
+            Environment.CurrentDirectory = AppDomain.CurrentDomain.SetupInformation.ApplicationBase ?? string.Empty;
+            await Adb.PushAapt(device);
 
-            appName = await Adb.GetAppName(device, path);
-            if (appName == null)
-                continue;
+            var appPackagePathsDict = await Adb.GetPackagesWithApkPaths(device);
+            appPackagePathsDict = appPackagePathsDict
+                .Where(pair => AppNames.GetAppName(pair.Key) == null)
+                .ToDictionary(pair => pair.Key, pair => pair.Value);
 
-            AppNames.SetAppName(package, appName);
+            var total = appPackagePathsDict.Count;
+            const int workerCount = 12;
+            var packageDictList = SplitDictionary(appPackagePathsDict, workerCount);
+            var workers = new List<BackgroundWorker>();
+            var finishedCountList = new int[workerCount];
+
+            for (var i = 0; i < workerCount; i++)
+            {
+                var worker = new BackgroundWorker
+                {
+                    WorkerReportsProgress = true,
+                };
+
+                var packageDict = packageDictList[i];
+                worker.DoWork += (sender, args) =>
+                {
+                    var result = new Dictionary<string, Adb.AppName>();
+                    var count = 0;
+
+                    foreach (var (package, path) in packageDict)
+                    {
+                        var appName = Adb.GetAppName(device, path).Result;
+                        count++;
+                        worker.ReportProgress(count);
+
+                        if (appName != null)
+                            result.Add(package, appName);
+                    }
+
+                    args.Result = result;
+                };
+
+                var index = i;
+                worker.ProgressChanged += (sender, args) =>
+                {
+                    finishedCountList[index] = args.ProgressPercentage;
+                    StatusTextBlock.Text = $"Getting app names: {finishedCountList.Sum()} / {total}";
+                };
+
+                worker.RunWorkerCompleted += (sender, args) =>
+                {
+                    if (args.Error != null)
+                        MessageBox.Show(args.Error.ToString());
+                    else if (args.Result is Dictionary<string, Adb.AppName> result)
+                        foreach (var (package, appName) in result)
+                            AppNames.SetAppName(package, appName);
+                };
+
+                worker.RunWorkerAsync();
+                workers.Add(worker);
+            }
+
+            while (workers.Any(worker => worker.IsBusy))
+                await Task.Delay(100);
+
+            AppNames.Save();
+
+            stopwatch.Stop();
+
+            StatusTextBlock.Text = $"Got {total} app names in {stopwatch.Elapsed.Seconds}s.";
+
+            await RefreshPackages();
+        }
+        finally
+        {
+            GetNamesButton.IsEnabled = true;
+        }
+    }
+
+    private static List<Dictionary<string, string>> SplitDictionary(Dictionary<string, string> originalDictionary, int numberOfPartitions)
+    {
+        // Calculate the approximate number of elements per partition
+        var elementsPerPartition = (int)Math.Ceiling((double)originalDictionary.Count / numberOfPartitions);
+
+        // Split the dictionary into partitions
+        var partitions = new List<Dictionary<string, string>>();
+        for (var i = 0; i < numberOfPartitions; i++)
+        {
+            var partition = originalDictionary
+                .Skip(i * elementsPerPartition)
+                .Take(elementsPerPartition)
+                .ToDictionary(pair => pair.Key, pair => pair.Value);
+
+            partitions.Add(partition);
         }
 
-        AppNames.Save();
-
-        StatusTextBlock.Text = "Got app names.";
-
-        await RefreshPackages();
-        GetNamesButton.IsEnabled = true;
+        return partitions;
     }
 }
